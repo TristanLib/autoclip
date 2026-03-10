@@ -388,6 +388,11 @@ autoclip/
 │   ├── stop_autoclip.sh   # Stop script
 │   └── status_autoclip.sh # Status check
 ├── docs/                  # Documentation
+├── deploy/                # Server deployment files
+│   ├── setup.sh           # Ubuntu one-click deployment script
+│   ├── autoclip-backend.service  # FastAPI systemd service
+│   ├── autoclip-celery.service   # Celery systemd service
+│   └── nginx.conf         # Nginx configuration reference template
 ├── logs/                  # Log files
 ├── Dockerfile             # Docker image build file
 ├── Dockerfile.dev         # Development environment Docker file
@@ -603,26 +608,104 @@ docker-compose -f docker-compose.dev.yml logs -f
 
 Complete Docker deployment guide please refer to [DOCKER.md](DOCKER.md) documentation.
 
-### System Service
+### Ubuntu Server Deployment (No Docker)
+
+The `deploy/` directory provides a one-click Ubuntu server deployment solution,
+managing two background services (FastAPI + Celery) via systemd.
+
+#### Step 1: Clone and Run the Deployment Script
 
 ```bash
-# Create systemd service file
-sudo nano /etc/systemd/system/autoclip.service
+git clone https://github.com/TristanLib/autoclip.git
+cd autoclip
 
-[Unit]
-Description=AutoClip Video Processing System
-After=network.target redis.service
+# One-click deployment (requires root)
+sudo bash deploy/setup.sh
+```
 
-[Service]
-Type=forking
-User=autoclip
-WorkingDirectory=/opt/autoclip
-ExecStart=/opt/autoclip/start_autoclip.sh
-ExecStop=/opt/autoclip/stop_autoclip.sh
-Restart=always
+The script automatically:
 
-[Install]
-WantedBy=multi-user.target
+- Installs system dependencies (Python, Node.js, Redis, FFmpeg, etc.)
+- Creates the `autoclip` system user and deploys code to `/opt/autoclip`
+- Creates a Python virtual environment, installs dependencies, and initializes the database
+- Builds the frontend static files to `frontend/dist`
+- Registers and starts two systemd services: `autoclip-backend` (FastAPI) and `autoclip-celery`
+
+#### Step 2: Configure AI API Key
+
+```bash
+sudo nano /opt/autoclip/data/settings.json
+# Fill in your Gemini / DashScope / OpenAI API Key
+
+sudo systemctl restart autoclip-backend autoclip-celery
+```
+
+#### Step 3: Configure Nginx
+
+Add the following to your Nginx site configuration (full template at `deploy/nginx.conf`):
+
+```nginx
+server {
+    server_name your.domain.com;
+
+    # Frontend static files
+    root /opt/autoclip/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;  # SPA fallback
+    }
+
+    # Backend API proxy
+    # !! proxy_buffering off is required for real-time SSE progress events !!
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8100;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout    600s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    600s;
+        proxy_buffering    off;
+        proxy_cache        off;
+    }
+
+    # Media files served directly by Nginx
+    location /data/projects/ {
+        alias /opt/autoclip/data/projects/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    client_max_body_size 1024m;
+}
+```
+
+```bash
+sudo nginx -t && sudo nginx -s reload
+```
+
+#### Step 4: Configure HTTPS (Recommended)
+
+```bash
+sudo certbot --nginx -d your.domain.com
+```
+
+#### Service Management
+
+```bash
+# Check service status
+sudo systemctl status autoclip-backend
+sudo systemctl status autoclip-celery
+
+# Restart services (after changing configuration)
+sudo systemctl restart autoclip-backend autoclip-celery
+
+# View live logs
+tail -f /opt/autoclip/logs/backend.log
+tail -f /opt/autoclip/logs/celery.log
 ```
 
 ## 📈 Roadmap

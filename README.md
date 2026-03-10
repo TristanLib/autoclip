@@ -376,6 +376,11 @@ autoclip/
 │   ├── README.md          # 文档中心
 │   ├── i18n.md           # 国际化配置
 │   └── *.md              # 其他文档
+├── deploy/                # 服务器部署文件
+│   ├── setup.sh           # Ubuntu 一键部署脚本
+│   ├── autoclip-backend.service  # FastAPI systemd 服务
+│   ├── autoclip-celery.service   # Celery systemd 服务
+│   └── nginx.conf         # Nginx 配置参考模板
 ├── logs/                  # 日志文件
 ├── Dockerfile             # Docker镜像构建文件
 ├── Dockerfile.dev         # 开发环境Docker文件
@@ -591,26 +596,103 @@ docker-compose -f docker-compose.dev.yml logs -f
 
 完整的Docker部署指南请参考 [DOCKER.md](DOCKER.md) 文档。
 
-### 系统服务
+### Ubuntu 服务器部署（无 Docker）
+
+`deploy/` 目录提供了 Ubuntu 服务器一键部署方案，通过 systemd 管理两个后台服务（FastAPI + Celery）。
+
+#### 第一步：克隆并运行部署脚本
 
 ```bash
-# 创建systemd服务文件
-sudo nano /etc/systemd/system/autoclip.service
+git clone https://github.com/TristanLib/autoclip.git
+cd autoclip
 
-[Unit]
-Description=AutoClip Video Processing System
-After=network.target redis.service
+# 一键部署（需要 root 权限）
+sudo bash deploy/setup.sh
+```
 
-[Service]
-Type=forking
-User=autoclip
-WorkingDirectory=/opt/autoclip
-ExecStart=/opt/autoclip/start_autoclip.sh
-ExecStop=/opt/autoclip/stop_autoclip.sh
-Restart=always
+脚本自动完成：
 
-[Install]
-WantedBy=multi-user.target
+- 安装系统依赖（Python、Node.js、Redis、FFmpeg 等）
+- 创建 `autoclip` 系统用户，代码部署到 `/opt/autoclip`
+- 创建 Python 虚拟环境、安装依赖、初始化数据库
+- 构建前端静态文件到 `frontend/dist`
+- 注册并启动 `autoclip-backend`（FastAPI）和 `autoclip-celery` 两个 systemd 服务
+
+#### 第二步：配置 AI API Key
+
+```bash
+sudo nano /opt/autoclip/data/settings.json
+# 填入你的 Gemini / DashScope / OpenAI API Key
+
+sudo systemctl restart autoclip-backend autoclip-celery
+```
+
+#### 第三步：配置 Nginx
+
+将以下内容添加到你的 Nginx 站点配置（完整模板见 `deploy/nginx.conf`）：
+
+```nginx
+server {
+    server_name your.domain.com;
+
+    # 前端静态文件
+    root /opt/autoclip/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;  # SPA fallback
+    }
+
+    # 后端 API 代理
+    # !! proxy_buffering off 是必须的，否则 SSE 进度推送不实时 !!
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8100;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout    600s;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout    600s;
+        proxy_buffering    off;
+        proxy_cache        off;
+    }
+
+    # 媒体文件直接由 Nginx 提供
+    location /data/projects/ {
+        alias /opt/autoclip/data/projects/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+
+    client_max_body_size 1024m;
+}
+```
+
+```bash
+sudo nginx -t && sudo nginx -s reload
+```
+
+#### 第四步：配置 HTTPS（推荐）
+
+```bash
+sudo certbot --nginx -d your.domain.com
+```
+
+#### 服务管理
+
+```bash
+# 查看服务状态
+sudo systemctl status autoclip-backend
+sudo systemctl status autoclip-celery
+
+# 重启服务（修改配置后执行）
+sudo systemctl restart autoclip-backend autoclip-celery
+
+# 查看实时日志
+tail -f /opt/autoclip/logs/backend.log
+tail -f /opt/autoclip/logs/celery.log
 ```
 
 ## 📈 路线图
