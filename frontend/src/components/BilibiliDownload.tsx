@@ -51,6 +51,14 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
     loadCategories()
   }, [])
 
+  // 当浏览器选择后，如果已有URL但未解析成功，自动重新解析
+  useEffect(() => {
+    if (selectedBrowser && url.trim() && !videoInfo && validateVideoUrl(url.trim())) {
+      parseVideoInfo()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBrowser])
+
   // 清理轮询
   useEffect(() => {
     return () => {
@@ -330,10 +338,36 @@ const BilibiliDownload: React.FC<BilibiliDownloadProps> = ({ onDownloadSuccess }
                  gap: '8px'
                }}>
                  <span>{error}</span>
+                 {validateVideoUrl(url.trim()) && (
+                   <Button size="small" onClick={parseVideoInfo} style={{ marginLeft: 8, fontSize: '12px' }}>重新解析</Button>
+                 )}
                </div>
              )}
           </div>
-          
+
+          {/* 浏览器选择（YouTube需要cookie） */}
+          <div>
+            <Text style={{ color: '#ffffff', marginBottom: '8px', display: 'block', fontSize: '14px', fontWeight: 500 }}>浏览器 Cookie（YouTube 必须选择）</Text>
+            <Select
+              placeholder="选择浏览器以获取cookie（YouTube必须选）"
+              value={selectedBrowser || undefined}
+              onChange={(value) => setSelectedBrowser(value || '')}
+              allowClear
+              style={{ width: '100%', height: '40px' }}
+              dropdownStyle={{
+                background: 'rgba(38, 38, 38, 0.95)',
+                border: '1px solid rgba(79, 172, 254, 0.3)',
+                borderRadius: '12px'
+              }}
+              disabled={downloading}
+            >
+              <Select.Option value="chrome">Chrome</Select.Option>
+              <Select.Option value="firefox">Firefox</Select.Option>
+              <Select.Option value="safari">Safari</Select.Option>
+              <Select.Option value="edge">Edge</Select.Option>
+            </Select>
+          </div>
+
           {/* 显示解析成功的视频信息 */}
           {videoInfo && (
             <div style={{

@@ -13,7 +13,7 @@ class SubtitleProcessor:
     
     def __init__(self):
         # 修复正则表达式中的无效转义序列，使用原始字符串
-        self.word_separators = r'[，。！？；：""''（）【】、\s]+'
+        self.word_separators = r"""[，。！？；：""''（）【】、\s]+"""
     
     def parse_srt_to_word_level(self, srt_path: Path) -> List[Dict]:
         """

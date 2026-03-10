@@ -4,6 +4,7 @@ YouTube相关API路由
 """
 
 import logging
+import shutil
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Form, UploadFile, File
 from pydantic import BaseModel
@@ -15,6 +16,27 @@ import uuid
 import asyncio
 from datetime import datetime
 import yt_dlp
+
+
+def _get_node_path() -> str:
+    """动态获取 Node.js 路径，兼容 macOS (Homebrew) 和 Linux"""
+    # 1. 优先读取 settings.json 中的配置
+    try:
+        from ...core.shared_config import config_manager
+        settings = config_manager.settings
+        if hasattr(settings, 'node_path') and settings.node_path:
+            return settings.node_path
+    except Exception:
+        pass
+    # 2. 自动检测系统 node
+    node = shutil.which('node')
+    if node:
+        return node
+    # 3. macOS Homebrew 常见路径兜底
+    for fallback in ['/opt/homebrew/bin/node', '/usr/local/bin/node']:
+        if Path(fallback).exists():
+            return fallback
+    return 'node'  # 最终回退，依赖 PATH
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -70,12 +92,14 @@ async def parse_youtube_video(
         # 使用yt-dlp获取视频信息
         import yt_dlp
         import asyncio
-        
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'js_runtimes': {'node': {'path': _get_node_path()}},
+            'remote_components': {'ejs': {'source': 'github'}},
         }
-        
+
         if browser:
             ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
         
@@ -115,12 +139,14 @@ async def create_youtube_download_task(request: YouTubeDownloadRequest):
         # 先获取视频信息以获取缩略图
         import yt_dlp
         import asyncio
-        
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'js_runtimes': {'node': {'path': _get_node_path()}},
+            'remote_components': {'ejs': {'source': 'github'}},
         }
-        
+
         if request.browser:
             ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
         
@@ -326,8 +352,10 @@ async def process_youtube_download_task(task_id: str, request: YouTubeDownloadRe
             'noplaylist': True,
             'quiet': True,
             'no_warnings': False,  # 显示警告信息以便调试
+            'js_runtimes': {'node': {'path': _get_node_path()}},
+            'remote_components': {'ejs': {'source': 'github'}},
         }
-        
+
         if request.browser:
             ydl_opts['cookiesfrombrowser'] = (request.browser.lower(),)
         
@@ -602,8 +630,10 @@ async def _try_download_with_different_formats(url: str, download_dir: Path, bro
                 'outtmpl': str(download_dir / f'subtitle_%(title)s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
+                'js_runtimes': {'node': {'path': _get_node_path()}},
+                'remote_components': {'ejs': {'source': 'github'}},
             }
-            
+
             if browser:
                 ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
             
@@ -658,8 +688,10 @@ async def _try_download_with_different_langs(url: str, download_dir: Path, brows
                 'outtmpl': str(download_dir / f'lang_%(title)s.%(ext)s'),
                 'noplaylist': True,
                 'quiet': True,
+                'js_runtimes': {'node': {'path': _get_node_path()}},
+                'remote_components': {'ejs': {'source': 'github'}},
             }
-            
+
             if browser:
                 ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
             
@@ -691,18 +723,20 @@ async def _try_extract_from_metadata(url: str, download_dir: Path, browser: Opti
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
+            'js_runtimes': {'node': {'path': _get_node_path()}},
+            'remote_components': {'ejs': {'source': 'github'}},
         }
-        
+
         if browser:
             ydl_opts['cookiesfrombrowser'] = (browser.lower(),)
-        
+
         def extract_info_sync(url, ydl_opts):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
-        
+
         loop = asyncio.get_event_loop()
         info_dict = await loop.run_in_executor(None, extract_info_sync, url, ydl_opts)
-        
+
         # 检查是否有字幕信息
         subtitles = info_dict.get('subtitles', {})
         auto_subtitles = info_dict.get('automatic_captions', {})
