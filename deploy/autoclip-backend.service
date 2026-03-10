@@ -14,7 +14,7 @@ Environment="DATABASE_URL=sqlite:///./data/autoclip.db"
 Environment="ENVIRONMENT=production"
 ExecStart=APP_DIR/venv/bin/uvicorn backend.main:app \
     --host 127.0.0.1 \
-    --port 8000 \
+    --port 8100 \
     --workers 1
 Restart=on-failure
 RestartSec=5
