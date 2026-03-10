@@ -148,7 +148,8 @@ export const useWebSocket = (options: UseWebSocketOptions) => {
     }
 
     setConnectionStatus('connecting');
-    const wsUrl = `ws://localhost:8000/api/v1/ws/${userId}`;
+    const apiBase = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/^http/, 'ws');
+    const wsUrl = `${apiBase}/api/v1/ws/${userId}`;
     
     try {
       const ws = new WebSocket(wsUrl);

@@ -1,0 +1,25 @@
+[Unit]
+Description=AutoClip Backend (FastAPI)
+After=network.target redis.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=APP_USER
+Group=APP_USER
+WorkingDirectory=APP_DIR
+Environment="PYTHONPATH=APP_DIR"
+Environment="REDIS_URL=redis://127.0.0.1:6379/0"
+Environment="DATABASE_URL=sqlite:///./data/autoclip.db"
+Environment="ENVIRONMENT=production"
+ExecStart=APP_DIR/venv/bin/uvicorn backend.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:APP_DIR/logs/backend.log
+StandardError=append:APP_DIR/logs/backend.log
+
+[Install]
+WantedBy=multi-user.target

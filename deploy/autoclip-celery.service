@@ -1,0 +1,26 @@
+[Unit]
+Description=AutoClip Celery Worker
+After=network.target redis.service autoclip-backend.service
+Requires=redis.service
+
+[Service]
+Type=simple
+User=APP_USER
+Group=APP_USER
+WorkingDirectory=APP_DIR
+Environment="PYTHONPATH=APP_DIR"
+Environment="REDIS_URL=redis://127.0.0.1:6379/0"
+Environment="DATABASE_URL=sqlite:///./data/autoclip.db"
+Environment="ENVIRONMENT=production"
+ExecStart=APP_DIR/venv/bin/celery -A backend.core.celery_app worker \
+    --loglevel=info \
+    --concurrency=2 \
+    --queues=processing,video,notification,maintenance,celery \
+    --hostname=worker1@%%h
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:APP_DIR/logs/celery.log
+StandardError=append:APP_DIR/logs/celery.log
+
+[Install]
+WantedBy=multi-user.target
