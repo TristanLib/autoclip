@@ -62,7 +62,7 @@ services:
       - ENVIRONMENT=production
       - DEBUG=false
       - LOG_LEVEL=INFO
-    command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A backend.core.celery_app worker --loglevel=info --concurrency=2 --queues=processing,video,notification,maintenance,celery --hostname=worker1@%h
     depends_on:
       redis:
         condition: service_healthy
