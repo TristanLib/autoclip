@@ -330,7 +330,7 @@ start_celery() {
     nohup celery -A backend.core.celery_app worker \
         --loglevel=info \
         --concurrency=2 \
-        -Q processing,upload,notification,maintenance \
+        -Q processing,video,upload,notification,maintenance,celery \
         --hostname=worker@%h \
         > "$CELERY_LOG" 2>&1 &
     
