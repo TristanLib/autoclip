@@ -110,15 +110,22 @@ systemctl restart autoclip-backend autoclip-celery
 
 # ── 8. 配置 Nginx ─────────────────────────────────────────────────────────────
 info "配置 Nginx..."
-sed "s|APP_DIR|$APP_DIR|g" \
+
+# 用环境变量 SERVER_NAME 指定域名/IP，未设置则用服务器 IP
+SERVER_NAME="${SERVER_NAME:-$(hostname -I | awk '{print $1}')}"
+info "Nginx server_name: $SERVER_NAME"
+
+sed "s|APP_DIR|$APP_DIR|g; s|SERVER_NAME_PLACEHOLDER|$SERVER_NAME|g" \
     "$APP_DIR/deploy/nginx.conf" \
     > /etc/nginx/sites-available/autoclip
 
 ln -sf /etc/nginx/sites-available/autoclip /etc/nginx/sites-enabled/autoclip
-rm -f /etc/nginx/sites-enabled/default   # 删除默认站点
+# ⚠️  不删除 default，避免影响已有站点
+# 如果 default 与 autoclip 端口冲突，手动执行：
+#   rm /etc/nginx/sites-enabled/default
 
 nginx -t && systemctl reload nginx
-info "Nginx 配置完成"
+info "Nginx 配置完成（已跳过删除 default，如有冲突请手动处理）"
 
 # ── 9. 权限修正 ────────────────────────────────────────────────────────────────
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
